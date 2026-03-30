@@ -23,7 +23,7 @@ struct ContentView: View {
             // Overlay controls (buttons + page indicator)
             OverlayControlsView(windowController: windowController)
         }
-        .onDrop(of: [.fileURL], delegate: PDFDropDelegate(appState: appState, windowController: windowController))
+        .onDrop(of: [.fileURL], delegate: FileDropDelegate(appState: appState, windowController: windowController))
         .sheet(isPresented: Binding(
             get: { appState.showURLInput },
             set: { appState.showURLInput = $0 }
@@ -51,6 +51,15 @@ struct ContentView: View {
                 url: url,
                 isInteractive: appState.mode == .present
             )
+        case .images(let urls):
+            ImageContentView(
+                urls: urls,
+                currentPage: Binding(
+                    get: { appState.currentPage },
+                    set: { appState.currentPage = $0 }
+                ),
+                isInteractive: appState.mode == .present
+            )
         }
     }
 
@@ -65,15 +74,15 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
 
             if appState.mode == .present {
-                Text("Drop a PDF file here")
+                Text("Drop PDF or images here")
                     .font(.system(size: 14))
                     .foregroundStyle(.tertiary)
 
                 HStack(spacing: 12) {
                     Button {
-                        openPDFFile()
+                        openFile()
                     } label: {
-                        Label("Open PDF", systemImage: "folder")
+                        Label("Open File", systemImage: "folder")
                             .font(.system(size: 13, weight: .medium))
                     }
                     .buttonStyle(.glass)
@@ -146,14 +155,13 @@ struct ContentView: View {
     }
 
     private func openRecentItem(_ item: RecentItem) {
-        if item.isPDF {
-            // Try resolving bookmark first
+        switch item.resolvedType {
+        case .pdf:
             if let url = item.resolveURL() {
                 _ = url.startAccessingSecurityScopedResource()
                 appState.loadPDF(url: url)
                 windowController.updateCardAspectRatio()
             } else {
-                // No bookmark or stale — ask user to re-select
                 let panel = NSOpenPanel()
                 panel.allowedContentTypes = [.pdf]
                 panel.message = "Re-open \"\(item.title)\" to grant access"
@@ -164,19 +172,30 @@ struct ContentView: View {
                     windowController.updateCardAspectRatio()
                 }
             }
-        } else {
+        case .images:
+            if let url = item.resolveURL() {
+                _ = url.startAccessingSecurityScopedResource()
+                appState.loadImages(urls: [url])
+                windowController.updateCardAspectRatio()
+            }
+        case .web:
             appState.loadWeb(url: item.url)
         }
     }
 
-    private func openPDFFile() {
+    private func openFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic]
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            appState.loadPDF(url: url)
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            let urls = panel.urls
+            if urls.count == 1 && urls[0].pathExtension.lowercased() == "pdf" {
+                appState.loadPDF(url: urls[0])
+            } else {
+                appState.loadImages(urls: urls)
+            }
             windowController.updateCardAspectRatio()
         }
     }
@@ -201,7 +220,7 @@ struct RecentItemRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: item.isPDF ? "doc.fill" : "globe")
+            Image(systemName: item.resolvedType == .pdf ? "doc.fill" : item.resolvedType == .images ? "photo.fill" : "globe")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .frame(width: 16)

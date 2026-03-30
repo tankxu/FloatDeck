@@ -43,8 +43,8 @@ struct OverlayControlsView: View {
 
             Spacer()
 
-            // Page indicator (PDF only)
-            if case .pdf = appState.contentType, appState.totalPages > 0 {
+            // Page indicator (PDF and images)
+            if appState.totalPages > 1 {
                 PageIndicatorView()
                     .padding(.bottom, 8)
             }

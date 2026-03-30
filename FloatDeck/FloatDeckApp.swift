@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // File menu
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        let openItem = NSMenuItem(title: "Open PDF...", action: #selector(handleOpenPDF), keyEquivalent: "o")
+        let openItem = NSMenuItem(title: "Open File...", action: #selector(handleOpenFile), keyEquivalent: "o")
         openItem.target = self
         fileMenu.addItem(openItem)
         let urlItem = NSMenuItem(title: "Load URL...", action: #selector(handleLoadURL), keyEquivalent: "l")
@@ -79,13 +79,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         windowController.applyFullScreenPreference()
     }
 
-    @objc private func handleOpenPDF() {
+    @objc private func handleOpenFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic]
+        panel.allowsMultipleSelection = true
         panel.begin { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
-            self.appState.loadPDF(url: url)
+            guard let self, response == .OK, !panel.urls.isEmpty else { return }
+            let urls = panel.urls
+            if urls.count == 1 && urls[0].pathExtension.lowercased() == "pdf" {
+                self.appState.loadPDF(url: urls[0])
+            } else {
+                self.appState.loadImages(urls: urls)
+            }
             self.windowController.updateCardAspectRatio()
         }
     }

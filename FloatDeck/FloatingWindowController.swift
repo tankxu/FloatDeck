@@ -127,11 +127,15 @@ final class FloatingWindowController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        if case .pdf = appState.contentType {
+        // Lock aspect ratio for PDF and images
+        switch appState.contentType {
+        case .pdf, .images:
             let ratio = appState.aspectRatio
             if ratio > 0 {
                 return NSSize(width: frameSize.width, height: frameSize.width / ratio)
             }
+        default:
+            break
         }
         if let ratio = panel.lockedAspectRatio, ratio > 0 {
             return NSSize(width: frameSize.width, height: frameSize.width / ratio)

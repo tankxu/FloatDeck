@@ -33,7 +33,7 @@ final class KeyboardHandler {
         if hasCmd {
             switch event.charactersIgnoringModifiers {
             case "o":
-                openPDFPanel()
+                openFilePanel()
                 return true
             case "l":
                 appState.showURLInput = true
@@ -78,16 +78,21 @@ final class KeyboardHandler {
         }
     }
 
-    private func openPDFPanel() {
+    private func openFilePanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic]
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.message = "Select a PDF to display"
+        panel.message = "Select a PDF or images to display"
 
         panel.begin { [weak self] response in
-            guard let self, response == .OK, let url = panel.url else { return }
-            self.appState.loadPDF(url: url)
+            guard let self, response == .OK, !panel.urls.isEmpty else { return }
+            let urls = panel.urls
+            if urls.count == 1 && urls[0].pathExtension.lowercased() == "pdf" {
+                self.appState.loadPDF(url: urls[0])
+            } else {
+                self.appState.loadImages(urls: urls)
+            }
             self.windowController.updateCardAspectRatio()
         }
     }

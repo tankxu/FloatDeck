@@ -1,26 +1,44 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct PDFDropDelegate: DropDelegate {
+private let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic"]
+
+struct FileDropDelegate: DropDelegate {
     let appState: AppState
     let windowController: FloatingWindowController
 
     func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.pdf, .fileURL])
+        info.hasItemsConforming(to: [.fileURL])
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let itemProvider = info.itemProviders(for: [.fileURL]).first else {
-            return false
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+
+        var collectedURLs: [URL] = []
+        let group = DispatchGroup()
+
+        for provider in providers {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                defer { group.leave() }
+                guard let data = data as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                collectedURLs.append(url)
+            }
         }
 
-        itemProvider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
-            guard let data = data as? Data,
-                  let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+        group.notify(queue: .main) {
+            let ext = collectedURLs.first?.pathExtension.lowercased() ?? ""
 
-            DispatchQueue.main.async {
-                if url.pathExtension.lowercased() == "pdf" {
-                    appState.loadPDF(url: url)
+            if collectedURLs.count == 1 && ext == "pdf" {
+                appState.loadPDF(url: collectedURLs[0])
+                windowController.updateCardAspectRatio()
+            } else {
+                // Filter to image files only
+                let imageURLs = collectedURLs.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+                if !imageURLs.isEmpty {
+                    appState.loadImages(urls: imageURLs)
                     windowController.updateCardAspectRatio()
                 }
             }

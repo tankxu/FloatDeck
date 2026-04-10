@@ -28,7 +28,7 @@ struct ContentView: View {
             get: { appState.showURLInput },
             set: { appState.showURLInput = $0 }
         )) {
-            URLInputSheet(appState: appState)
+            URLInputSheet(appState: appState, windowController: windowController)
         }
     }
 
@@ -179,22 +179,26 @@ struct ContentView: View {
                 windowController.updateCardAspectRatio()
             }
         case .web:
-            appState.loadWeb(url: item.url)
+            appState.loadURLSmart(url: item.url) {
+                windowController.updateCardAspectRatio()
+            }
         }
     }
 
     private func openFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic]
+        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic, .svg]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.begin { response in
             guard response == .OK, !panel.urls.isEmpty else { return }
             let urls = panel.urls
-            if urls.count == 1 && urls[0].pathExtension.lowercased() == "pdf" {
+            let ext = urls.first?.pathExtension.lowercased() ?? ""
+            if urls.count == 1 && ext == "pdf" {
                 appState.loadPDF(url: urls[0])
             } else {
-                appState.loadImages(urls: urls)
+                let imageURLs = urls.filter { AppState.imageExtensions.contains($0.pathExtension.lowercased()) }
+                appState.loadImages(urls: imageURLs)
             }
             windowController.updateCardAspectRatio()
         }

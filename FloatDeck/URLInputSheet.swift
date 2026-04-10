@@ -2,7 +2,9 @@ import SwiftUI
 
 struct URLInputSheet: View {
     let appState: AppState
+    let windowController: FloatingWindowController
     @State private var urlText = "https://"
+    @FocusState private var isInputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -12,6 +14,7 @@ struct URLInputSheet: View {
 
             TextField("Enter URL", text: $urlText)
                 .textFieldStyle(.roundedBorder)
+                .focused($isInputFocused)
                 .onSubmit { loadURL() }
 
             HStack {
@@ -25,6 +28,11 @@ struct URLInputSheet: View {
         }
         .padding(20)
         .frame(width: 360)
+        .onAppear {
+            DispatchQueue.main.async {
+                isInputFocused = true
+            }
+        }
     }
 
     private var isValidURL: Bool {
@@ -34,7 +42,9 @@ struct URLInputSheet: View {
 
     private func loadURL() {
         guard let url = URL(string: urlText), isValidURL else { return }
-        appState.loadWeb(url: url)
+        appState.loadURLSmart(url: url) {
+            windowController.updateCardAspectRatio()
+        }
         dismiss()
     }
 }

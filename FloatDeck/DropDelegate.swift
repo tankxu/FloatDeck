@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic"]
+private let imageExtensions: Set<String> = AppState.imageExtensions
 
 struct FileDropDelegate: DropDelegate {
     let appState: AppState
@@ -35,7 +35,7 @@ struct FileDropDelegate: DropDelegate {
                 appState.loadPDF(url: collectedURLs[0])
                 windowController.updateCardAspectRatio()
             } else {
-                // Filter to image files only
+                // Filter to image files only (including svg)
                 let imageURLs = collectedURLs.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
                 if !imageURLs.isEmpty {
                     appState.loadImages(urls: imageURLs)

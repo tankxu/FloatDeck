@@ -50,6 +50,8 @@ struct RecentItem: Codable, Identifiable, Equatable {
 
 @Observable
 final class AppState {
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "webp", "heic", "svg"]
+
     var mode: WindowMode = .card
     var contentType: ContentType = .empty
     var currentPage: Int = 0
@@ -142,16 +144,37 @@ final class AppState {
         currentPage = 0
         totalPages = sorted.count
 
-        // Aspect ratio from first image
-        if let image = NSImage(contentsOf: sorted[0]) {
-            let size = image.size
-            if size.height > 0 {
-                aspectRatio = size.width / size.height
-            }
+        if let ratio = Self.assetAspectRatio(for: sorted[0]) {
+            aspectRatio = ratio
         }
 
         let title = sorted.count == 1 ? sorted[0].lastPathComponent : "\(sorted[0].lastPathComponent) +\(sorted.count - 1)"
         addRecentItem(url: sorted[0], title: title, isPDF: false, type: .images)
+    }
+
+    /// Smart URL loader:
+    /// - Direct resource URL (.pdf/.png/.jpg/.svg...) => download then open as file
+    /// - Normal webpage URL => open in web view
+    func loadURLSmart(url: URL, onLoaded: (() -> Void)? = nil) {
+        let ext = Self.extensionFromURL(url)
+        if ext == "pdf" || Self.imageExtensions.contains(ext) {
+            downloadToTemp(url: url, preferredExtension: ext) { [weak self] localURL in
+                guard let self, let localURL else { return }
+                DispatchQueue.main.async {
+                    let localExt = localURL.pathExtension.lowercased()
+                    if localExt == "pdf" {
+                        self.loadPDF(url: localURL)
+                    } else {
+                        self.loadImages(urls: [localURL])
+                    }
+                    onLoaded?()
+                }
+            }
+            return
+        }
+
+        loadWeb(url: url)
+        onLoaded?()
     }
 
     func closeContent() {
@@ -198,5 +221,85 @@ final class AppState {
     func removeRecentItem(_ item: RecentItem) {
         recentItems.removeAll { $0.id == item.id }
         saveRecentItems()
+    }
+
+    // MARK: - Helpers
+
+    static func extensionFromURL(_ url: URL) -> String {
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let ext = (components.path as NSString).pathExtension.lowercased()
+            if !ext.isEmpty { return ext }
+        }
+        return url.pathExtension.lowercased()
+    }
+
+    static func assetAspectRatio(for url: URL) -> CGFloat? {
+        let ext = url.pathExtension.lowercased()
+
+        if ext == "svg", let ratio = svgAspectRatio(url: url) {
+            return ratio
+        }
+
+        if let image = NSImage(contentsOf: url), image.size.height > 0 {
+            return image.size.width / image.size.height
+        }
+
+        return nil
+    }
+
+    private static func svgAspectRatio(url: URL) -> CGFloat? {
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+
+        if let viewBoxMatch = text.range(of: #"viewBox\s*=\s*"([^"]+)""#, options: .regularExpression) {
+            let raw = String(text[viewBoxMatch]).replacingOccurrences(of: "viewBox=\"", with: "").dropLast()
+            let values = raw.split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
+            if values.count == 4, values[3] > 0 {
+                return CGFloat(values[2] / values[3])
+            }
+        }
+
+        if let width = extractSVGLength(named: "width", in: text),
+           let height = extractSVGLength(named: "height", in: text),
+           height > 0 {
+            return CGFloat(width / height)
+        }
+
+        return nil
+    }
+
+    private static func extractSVGLength(named name: String, in text: String) -> Double? {
+        let pattern = #"\#(name)\s*=\s*"([0-9]+(?:\.[0-9]+)?)""#
+        guard let range = text.range(of: pattern, options: .regularExpression) else { return nil }
+        let raw = String(text[range])
+        let value = raw
+            .replacingOccurrences(of: "\(name)=\"", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+        return Double(value)
+    }
+
+    private func downloadToTemp(url: URL, preferredExtension: String, completion: @escaping (URL?) -> Void) {
+        let task = URLSession.shared.downloadTask(with: url) { tempURL, _, _ in
+            guard let tempURL else {
+                completion(nil)
+                return
+            }
+
+            let ext = preferredExtension.isEmpty ? "bin" : preferredExtension
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent("floatdeck-\(UUID().uuidString)")
+                .appendingPathExtension(ext)
+
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.moveItem(at: tempURL, to: destination)
+                completion(destination)
+            } catch {
+                completion(nil)
+            }
+        }
+        task.resume()
     }
 }

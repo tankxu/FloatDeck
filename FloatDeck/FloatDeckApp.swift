@@ -81,15 +81,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc private func handleOpenFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic]
+        panel.allowedContentTypes = [.pdf, .png, .jpeg, .gif, .bmp, .tiff, .webP, .heic, .svg]
         panel.allowsMultipleSelection = true
         panel.begin { [weak self] response in
             guard let self, response == .OK, !panel.urls.isEmpty else { return }
             let urls = panel.urls
-            if urls.count == 1 && urls[0].pathExtension.lowercased() == "pdf" {
+            let ext = urls.first?.pathExtension.lowercased() ?? ""
+            if urls.count == 1 && ext == "pdf" {
                 self.appState.loadPDF(url: urls[0])
             } else {
-                self.appState.loadImages(urls: urls)
+                let imageURLs = urls.filter { AppState.imageExtensions.contains($0.pathExtension.lowercased()) }
+                self.appState.loadImages(urls: imageURLs)
             }
             self.windowController.updateCardAspectRatio()
         }
